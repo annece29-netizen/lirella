@@ -307,6 +307,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
       <p class="section-title" style="margin-bottom:0;">Mes bibliothèques</p>
       <button class="btn-add-small" onclick="openAddBiblioModal()">+ Nouvelle</button>
     </div>
+    <div id="a-ranger-zone" style="display:none;"></div>
     <div id="bibliotheques-list" style="padding-bottom:16px;">
       <div class="empty-state">
         <span>📚</span>
@@ -330,6 +331,13 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
         <div class="add-option-text">
           <h3>Scanner le code-barre</h3>
           <p>Pointe la caméra vers le code-barre du livre pour le trouver automatiquement</p>
+        </div>
+      </div>
+      <div class="add-option" onclick="openScan(true)">
+        <div class="add-option-icon" style="background:linear-gradient(135deg,#FFB347,#E07AA0);">⚡</div>
+        <div class="add-option-text">
+          <h3>Scanner plusieurs livres à la suite</h3>
+          <p>Idéal pour un déménagement : les livres sont ajoutés à "À ranger", tu choisis leur bibliothèque plus tard</p>
         </div>
       </div>
       <div class="add-option" onclick="toggleForm()">
@@ -518,7 +526,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
     </div>
   </div>
   <p class="scan-status" id="scan-status">Pointe la caméra vers le code-barre du livre</p>
-  <button class="scan-manual-toggle" onclick="showManualIsbnEntry()">Le code-barre est illisible ? Saisir le numéro à la main</button>
+  <button id="scan-manual-toggle" class="scan-manual-toggle" onclick="showManualIsbnEntry()">Le code-barre est illisible ? Saisir le numéro à la main</button>
 
   <div id="scan-input-zone" class="scan-input-zone" style="display:none;">
     <p>📖 Saisis le numéro ISBN<br><small style='opacity:0.7'>13 chiffres sous le code-barre</small></p>
@@ -526,7 +534,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
     <button class="scan-search-btn" onclick="searchISBN()">🔍 Rechercher</button>
   </div>
 
-  <button class="scan-close" onclick="closeScan()">Fermer</button>
+  <button id="scan-close" class="scan-close" onclick="closeScan()">Fermer</button>
 </div>
 
 <!-- MODAL : Nouvelle bibliothèque -->
@@ -659,7 +667,56 @@ function renderRecentBooks() {
 }
 
 // ===== BIBLIOTHEQUES =====
+function renderARanger() {
+  const zone = document.getElementById('a-ranger-zone');
+  const livresARanger = db.livres.filter(l => !l.biblioId);
+  if (livresARanger.length === 0) { zone.innerHTML = ''; zone.style.display = 'none'; return; }
+  zone.style.display = 'block';
+  const biblioOptions = db.bibliotheques.map(b => `<option value="${b.id}">${b.nom}</option>`).join('');
+  zone.innerHTML = `<div class="bibliotheque-card fade-in" style="border:2px dashed var(--rose-deep);">
+    <div class="bibliotheque-header" style="cursor:default;">
+      <div style="flex:1;">
+        <p class="bibliotheque-name">📦 À ranger</p>
+        <p class="bibliotheque-meta">${livresARanger.length} livre${livresARanger.length > 1 ? 's' : ''} scanné${livresARanger.length > 1 ? 's' : ''} sans bibliothèque</p>
+      </div>
+    </div>
+    <div class="etagere-section">
+      ${livresARanger.map(l => `
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(242,167,195,0.15);">
+          <div class="mini-book-cover" style="${l.cover ? `background:url('${l.cover}') center/cover` : 'background:var(--grad)'}; flex-shrink:0;">
+            ${l.cover ? '' : '<div class="mini-book-cover-overlay"></div>'}
+          </div>
+          <div style="flex:1; min-width:0;">
+            <p style="font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.titre}</p>
+            <p style="font-size:10px; color:var(--texte-leger);">${l.auteur || ''}</p>
+          </div>
+          ${db.bibliotheques.length === 0
+            ? `<span style="font-size:10px; color:var(--texte-leger);">Crée une bibliothèque</span>`
+            : `<select class="form-select" style="width:auto; padding:6px 24px 6px 8px; font-size:11px;" onchange="assignBookToBiblio('${l.id}', this.value)">
+                <option value="">Bibliothèque...</option>
+                ${biblioOptions}
+              </select>`
+          }
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
+}
+
+function assignBookToBiblio(livreId, biblioId) {
+  if (!biblioId) return;
+  const livre = db.livres.find(l => l.id === livreId);
+  const biblio = db.bibliotheques.find(b => b.id === biblioId);
+  if (!livre || !biblio) return;
+  livre.biblioId = biblioId;
+  livre.etagere = 1;
+  save();
+  updateUI();
+  showToast('"' + livre.titre.substring(0, 30) + '" rangé dans ' + biblio.nom + ' 📚');
+}
+
 function renderBibliotheques() {
+  renderARanger();
   const container = document.getElementById('bibliotheques-list');
   if (db.bibliotheques.length === 0) {
     container.innerHTML = `<div class="empty-state"><span>📚</span><h3>Aucune bibliothèque</h3><p>Crée ta première bibliothèque pour commencer à ranger tes livres !</p></div>`;
@@ -785,20 +842,38 @@ function saveBook() {
 // ===== SCAN CAMÉRA (ZXing) =====
 let zxingReader = null;
 let scanActiveStream = null;
+let bulkScanMode = false;
+let bulkScanCount = 0;
+let lastBulkScanCode = null;
+let lastBulkScanTime = 0;
 
-function openScan() {
+function openScan(bulk = false) {
+  bulkScanMode = bulk;
+  bulkScanCount = 0;
+  lastBulkScanCode = null;
   // On repart toujours d'un état propre : si un scan précédent n'a pas été
   // correctement arrêté, on le coupe avant de relancer la caméra.
   stopCameraScan();
   document.getElementById('scan-overlay').classList.add('active');
   document.getElementById('scan-input-zone').style.display = 'none';
-  document.getElementById('scan-status').textContent = 'Pointe la caméra vers le code-barre du livre';
+  document.getElementById('scan-close').textContent = bulk ? 'Terminer' : 'Fermer';
+  document.getElementById('scan-manual-toggle').style.display = bulk ? 'none' : 'block';
+  document.getElementById('scan-status').textContent = bulk
+    ? 'Scanne les livres un par un, ils seront ajoutés à "À ranger"'
+    : 'Pointe la caméra vers le code-barre du livre';
   startCameraScan();
 }
 
 function closeScan() {
   document.getElementById('scan-overlay').classList.remove('active');
+  document.getElementById('scan-manual-toggle').style.display = 'block';
   stopCameraScan();
+  if (bulkScanMode && bulkScanCount > 0) {
+    showToast(bulkScanCount + ' livre' + (bulkScanCount > 1 ? 's' : '') + ' ajouté' + (bulkScanCount > 1 ? 's' : '') + ' à ranger 📚');
+    updateUI();
+    goTo('library', document.querySelectorAll('.nav-item')[1]);
+  }
+  bulkScanMode = false;
 }
 
 function showManualIsbnEntry() {
@@ -854,7 +929,17 @@ async function startCameraScan() {
         const code = result.getText();
         onBarcodeDetected(code);
       }
-    }).then(controls => { scanActiveStream = controls; });
+    }).then(controls => {
+      scanActiveStream = controls;
+      // Diagnostic temporaire : affiche la résolution vidéo réellement obtenue,
+      // pour vérifier si le navigateur a bien accordé la résolution HD demandée.
+      const track = videoEl.srcObject?.getVideoTracks?.()[0];
+      const settings = track?.getSettings?.();
+      if (settings) {
+        document.getElementById('scan-status').textContent =
+          'Pointe la caméra vers le code-barre (résolution : ' + settings.width + 'x' + settings.height + ')';
+      }
+    });
   } catch (e) {
     document.getElementById('scan-status').textContent = 'Impossible d\'accéder à la caméra (' + (e && e.message ? e.message : 'erreur inconnue') + '), saisis le numéro à la main';
     showManualIsbnEntry();
@@ -891,11 +976,58 @@ function onBarcodeDetected(code) {
   // On ne garde que des codes plausibles (ISBN-13 commence en général par 978/979)
   const digits = code.replace(/[^0-9]/g, '');
   if (digits.length < 8) return;
+
+  if (bulkScanMode) {
+    // Anti-doublon : évite de ré-ajouter le même livre si la caméra continue de
+    // détecter le même code-barre pendant qu'on bouge le livre suivant en place.
+    const now = Date.now();
+    if (digits === lastBulkScanCode && now - lastBulkScanTime < 3000) return;
+    lastBulkScanCode = digits;
+    lastBulkScanTime = now;
+    addBookToRangerFromISBN(digits);
+    return;
+  }
+
   document.getElementById('scan-status').textContent = 'Code détecté : ' + digits;
   stopCameraScan();
   closeScan();
   document.getElementById('isbn-input').value = digits;
   searchISBN();
+}
+
+// Mode rafale : cherche le livre par ISBN et l'ajoute directement à "À ranger"
+// (sans bibliothèque assignée), sans jamais fermer l'écran de scan.
+async function addBookToRangerFromISBN(isbn) {
+  document.getElementById('scan-status').textContent = 'Recherche du livre...';
+  try {
+    const { res, data } = await fetchWithRetry(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
+    let titre = '', auteur = '', cover = '', resume = '', categorie = 'Autre';
+    if (res.ok && !data.error && data.items && data.items.length > 0) {
+      const info = data.items[0].volumeInfo;
+      titre = info.title || '';
+      auteur = (info.authors || []).join(', ');
+      cover = info.imageLinks?.thumbnail?.replace('http:', 'https:') || '';
+      resume = info.description || '';
+      categorie = (info.categories || ['Autre'])[0];
+    }
+    if (!titre) {
+      // Livre non trouvé : on garde quand même une trace avec l'ISBN, Marine
+      // pourra compléter le titre plus tard en modifiant la fiche.
+      titre = 'Livre à identifier (ISBN ' + isbn + ')';
+    }
+    db.livres.push({
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 7),
+      titre, auteur, categorie,
+      biblioId: null, etagere: null,
+      cover, resume, isbn
+    });
+    save();
+    bulkScanCount++;
+    document.getElementById('scan-status').textContent =
+      '✅ "' + titre.substring(0, 40) + '" ajouté (' + bulkScanCount + ' scanné' + (bulkScanCount > 1 ? 's' : '') + ') — scanne le suivant';
+  } catch (e) {
+    document.getElementById('scan-status').textContent = 'Erreur, réessaie de scanner ce livre';
+  }
 }
 
 // ===== PHOTO DE COUVERTURE (quand Google Books n'en a pas) =====
