@@ -517,7 +517,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
 
 <!-- SCAN OVERLAY -->
 <div id="scan-overlay" class="scan-overlay">
-  <div class="scan-video-wrap">
+  <div class="scan-video-wrap" onclick="refocusOnTap()">
     <video id="scan-video" muted playsinline></video>
     <div class="scan-frame">
       <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
@@ -526,6 +526,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
     </div>
   </div>
   <p class="scan-status" id="scan-status">Pointe la caméra vers le code-barre du livre</p>
+  <p style="color:rgba(255,255,255,0.6); font-size:11px; text-align:center; margin-top:-10px;">Image floue ? Touche l'écran de la caméra pour refaire la mise au point</p>
   <button id="scan-manual-toggle" class="scan-manual-toggle" onclick="showManualIsbnEntry()">Le code-barre est illisible ? Saisir le numéro à la main</button>
 
   <div id="scan-input-zone" class="scan-input-zone" style="display:none;">
@@ -883,6 +884,33 @@ function showManualIsbnEntry() {
   document.getElementById('isbn-input').focus();
 }
 
+// La cause principale de scan lent : la caméra n'arrive pas à faire la mise au point
+// de près (le code-barre devient flou quand on rapproche le livre). Deux réponses :
+// 1. Activer la mise au point continue seulement si le navigateur la supporte vraiment
+//    (on vérifie getCapabilities() plutôt que de deviner via une contrainte ignorée).
+// 2. Permettre de taper sur l'image pour forcer une nouvelle mise au point (comme
+//    l'appareil photo natif), solution fiable sur tous les iPhone.
+async function enableContinuousFocusIfSupported(track) {
+  if (!track || typeof track.getCapabilities !== 'function') return;
+  try {
+    const capabilities = track.getCapabilities();
+    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    }
+  } catch (e) { /* pas grave : le tap-to-focus manuel reste disponible */ }
+}
+
+async function refocusOnTap() {
+  const track = document.getElementById('scan-video').srcObject?.getVideoTracks?.()[0];
+  if (!track || typeof track.getCapabilities !== 'function') return;
+  try {
+    const capabilities = track.getCapabilities();
+    if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+    }
+  } catch (e) { /* certains navigateurs refusent : le scan continue sans */ }
+}
+
 async function startCameraScan() {
   // Le scan caméra nécessite HTTPS (ou localhost) et la librairie ZXing chargée
   if (typeof ZXing === 'undefined') {
@@ -913,14 +941,11 @@ async function startCameraScan() {
     const videoEl = document.getElementById('scan-video');
     // On demande directement la caméra arrière (environment) : c'est cet appel qui déclenche
     // la demande de permission dans Safari, pas la liste des périphériques.
-    // On demande aussi une résolution correcte : la résolution par défaut du navigateur
-    // est souvent basse, ce qui rend le code-barre flou et allonge beaucoup le scan.
     const constraints = {
       video: {
         facingMode: { ideal: 'environment' },
         width: { ideal: 1280 },
-        height: { ideal: 720 },
-        focusMode: { ideal: 'continuous' }
+        height: { ideal: 720 }
       }
     };
 
@@ -929,16 +954,10 @@ async function startCameraScan() {
         const code = result.getText();
         onBarcodeDetected(code);
       }
-    }).then(controls => {
+    }).then(async controls => {
       scanActiveStream = controls;
-      // Diagnostic temporaire : affiche la résolution vidéo réellement obtenue,
-      // pour vérifier si le navigateur a bien accordé la résolution HD demandée.
       const track = videoEl.srcObject?.getVideoTracks?.()[0];
-      const settings = track?.getSettings?.();
-      if (settings) {
-        document.getElementById('scan-status').textContent =
-          'Pointe la caméra vers le code-barre (résolution : ' + settings.width + 'x' + settings.height + ')';
-      }
+      await enableContinuousFocusIfSupported(track);
     });
   } catch (e) {
     document.getElementById('scan-status').textContent = 'Impossible d\'accéder à la caméra (' + (e && e.message ? e.message : 'erreur inconnue') + '), saisis le numéro à la main';
