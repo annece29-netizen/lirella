@@ -863,6 +863,13 @@ async function searchISBN() {
   try {
     const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
     const data = await res.json();
+    if (!res.ok || data.error) {
+      const reason = data.error?.status === 'RESOURCE_EXHAUSTED' || res.status === 429
+        ? 'Le service de recherche est surchargé, réessaie dans quelques minutes ou ajoute le livre manuellement'
+        : 'Erreur de recherche (' + res.status + '), essaie manuellement';
+      showToast(reason);
+      return;
+    }
     if (!data.items || data.items.length === 0) { showToast('Livre introuvable, essaie manuellement'); return; }
     const info = data.items[0].volumeInfo;
     isbnFoundBook = {
