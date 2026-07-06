@@ -861,7 +861,7 @@ async function searchISBN() {
   if (!isbn) return;
   showToast('Recherche en cours...');
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
     const data = await res.json();
     if (!res.ok || data.error) {
       const reason = data.error?.status === 'RESOURCE_EXHAUSTED' || res.status === 429
@@ -916,7 +916,7 @@ async function loadDiscover() {
     const queries = ['roman français 2024', 'thriller français 2025', 'romance bestseller 2024'];
     const results = [];
     for (const q of queries) {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&langRestrict=fr&maxResults=4&orderBy=newest`);
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&langRestrict=fr&maxResults=4&orderBy=newest&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
       const data = await res.json();
       if (data.items) results.push(...data.items);
     }
