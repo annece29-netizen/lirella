@@ -821,12 +821,25 @@ async function startCameraScan() {
       ZXing.BarcodeFormat.UPC_E
     ];
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
     zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+    // Par défaut ZXing n'analyse l'image que toutes les 500ms (pensé pour économiser
+    // la batterie) : on réduit l'intervalle pour un scan beaucoup plus réactif.
+    zxingReader.timeBetweenScansMillis = 100;
 
     const videoEl = document.getElementById('scan-video');
     // On demande directement la caméra arrière (environment) : c'est cet appel qui déclenche
     // la demande de permission dans Safari, pas la liste des périphériques.
-    const constraints = { video: { facingMode: { ideal: 'environment' } } };
+    // On demande aussi une résolution correcte : la résolution par défaut du navigateur
+    // est souvent basse, ce qui rend le code-barre flou et allonge beaucoup le scan.
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        focusMode: { ideal: 'continuous' }
+      }
+    };
 
     zxingReader.decodeFromConstraints(constraints, videoEl, (result, err) => {
       if (result) {
@@ -921,7 +934,17 @@ async function searchISBN() {
     document.getElementById('isbn-title').textContent = isbnFoundBook.titre;
     document.getElementById('isbn-author').textContent = isbnFoundBook.auteur;
     document.getElementById('isbn-desc').textContent = isbnFoundBook.resume;
-    document.getElementById('isbn-cover').src = isbnFoundBook.cover;
+    // Beaucoup de livres n'ont tout simplement pas de couverture dans Google Books :
+    // on affiche un dégradé de remplacement plutôt qu'une image cassée/vide.
+    const coverImg = document.getElementById('isbn-cover');
+    if (isbnFoundBook.cover) {
+      coverImg.src = isbnFoundBook.cover;
+      coverImg.style.background = '';
+      coverImg.onerror = () => { coverImg.removeAttribute('src'); coverImg.style.background = 'var(--grad)'; };
+    } else {
+      coverImg.removeAttribute('src');
+      coverImg.style.background = 'var(--grad)';
+    }
     document.getElementById('isbn-result').classList.add('visible');
     document.getElementById('manual-form').classList.remove('visible');
     showToast('Livre trouvé ! 🎉');
