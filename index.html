@@ -799,8 +799,8 @@ function showManualIsbnEntry() {
 
 async function startCameraScan() {
   // Le scan caméra nécessite HTTPS (ou localhost) et la librairie ZXing chargée
-  if (typeof ZXingBrowser === 'undefined' && typeof ZXing === 'undefined') {
-    document.getElementById('scan-status').textContent = 'Scanner indisponible, saisis le numéro à la main';
+  if (typeof ZXing === 'undefined') {
+    document.getElementById('scan-status').textContent = 'Le scanner n\'a pas fini de se charger, réessaie dans un instant ou saisis le numéro à la main';
     showManualIsbnEntry();
     return;
   }
@@ -821,17 +821,18 @@ async function startCameraScan() {
     zxingReader = new ZXing.BrowserMultiFormatReader(hints);
 
     const videoEl = document.getElementById('scan-video');
-    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    const backCam = devices.find(d => /back|arrière|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+    // On demande directement la caméra arrière (environment) : c'est cet appel qui déclenche
+    // la demande de permission dans Safari, pas la liste des périphériques.
+    const constraints = { video: { facingMode: { ideal: 'environment' } } };
 
-    zxingReader.decodeFromVideoDevice(backCam ? backCam.deviceId : undefined, videoEl, (result, err) => {
+    zxingReader.decodeFromConstraints(constraints, videoEl, (result, err) => {
       if (result) {
         const code = result.getText();
         onBarcodeDetected(code);
       }
     }).then(controls => { scanActiveStream = controls; });
   } catch (e) {
-    document.getElementById('scan-status').textContent = 'Impossible d\'accéder à la caméra, saisis le numéro à la main';
+    document.getElementById('scan-status').textContent = 'Impossible d\'accéder à la caméra (' + (e && e.message ? e.message : 'erreur inconnue') + '), saisis le numéro à la main';
     showManualIsbnEntry();
   }
 }
