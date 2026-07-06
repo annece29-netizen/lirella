@@ -779,6 +779,9 @@ let zxingReader = null;
 let scanActiveStream = null;
 
 function openScan() {
+  // On repart toujours d'un état propre : si un scan précédent n'a pas été
+  // correctement arrêté, on le coupe avant de relancer la caméra.
+  stopCameraScan();
   document.getElementById('scan-overlay').classList.add('active');
   document.getElementById('scan-input-zone').style.display = 'none';
   document.getElementById('scan-status').textContent = 'Pointe la caméra vers le code-barre du livre';
@@ -839,8 +842,26 @@ async function startCameraScan() {
 
 function stopCameraScan() {
   try {
+    if (scanActiveStream && typeof scanActiveStream.stop === 'function') { scanActiveStream.stop(); }
+  } catch(e) {}
+  try {
     if (zxingReader) { zxingReader.reset(); }
   } catch(e) {}
+  // Il faut aussi couper les pistes de la caméra et détacher le flux de la balise <video> :
+  // sans ça, ZXing refuse silencieusement de réattacher un nouveau flux au scan suivant.
+  const videoEl = document.getElementById('scan-video');
+  if (videoEl) {
+    try {
+      const stream = videoEl.srcObject;
+      if (stream && typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    } catch(e) {}
+    videoEl.srcObject = null;
+    videoEl.pause?.();
+    videoEl.removeAttribute('src');
+    videoEl.load?.();
+  }
   zxingReader = null;
   scanActiveStream = null;
 }
@@ -856,17 +877,35 @@ function onBarcodeDetected(code) {
   searchISBN();
 }
 
+// Certaines erreurs Google Books (503, 500, 429) sont passagères : on réessaie
+// automatiquement avant d'abandonner et d'afficher une erreur à l'utilisatrice.
+async function fetchWithRetry(url, maxAttempts = 3) {
+  let lastRes, lastData;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && !data.error) return { res, data };
+    lastRes = res;
+    lastData = data;
+    const isTemporary = [429, 500, 503].includes(res.status);
+    if (!isTemporary || attempt === maxAttempts) break;
+    await new Promise(r => setTimeout(r, 1000 * attempt));
+  }
+  return { res: lastRes, data: lastData };
+}
+
 async function searchISBN() {
   const isbn = document.getElementById('isbn-input').value.trim();
   if (!isbn) return;
   showToast('Recherche en cours...');
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
-    const data = await res.json();
+    const { res, data } = await fetchWithRetry(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
     if (!res.ok || data.error) {
       const reason = data.error?.status === 'RESOURCE_EXHAUSTED' || res.status === 429
         ? 'Le service de recherche est surchargé, réessaie dans quelques minutes ou ajoute le livre manuellement'
-        : 'Erreur de recherche (' + res.status + '), essaie manuellement';
+        : [500, 503].includes(res.status)
+          ? 'Le service de recherche est momentanément indisponible, réessaie dans un instant'
+          : 'Erreur de recherche (' + res.status + '), essaie manuellement';
       showToast(reason);
       return;
     }
@@ -916,8 +955,7 @@ async function loadDiscover() {
     const queries = ['roman français 2024', 'thriller français 2025', 'romance bestseller 2024'];
     const results = [];
     for (const q of queries) {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&langRestrict=fr&maxResults=4&orderBy=newest&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
-      const data = await res.json();
+      const { data } = await fetchWithRetry(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&langRestrict=fr&maxResults=4&orderBy=newest&key=AIzaSyA7j2JnWi9YRQDD_BRuEPVJlpoGQiPlWF4`);
       if (data.items) results.push(...data.items);
     }
     const seen = new Set();
