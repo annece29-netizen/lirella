@@ -348,6 +348,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
         <p class="isbn-result-title" id="isbn-title"></p>
         <p class="isbn-result-author" id="isbn-author"></p>
         <p class="isbn-result-desc" id="isbn-desc"></p>
+        <div id="isbn-no-cover-zone" style="display:none; margin-top:8px;">
+          <input id="isbn-cover-photo-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onCoverPhotoSelectedForIsbnResult(event)">
+          <button type="button" class="btn-add-small" onclick="document.getElementById('isbn-cover-photo-input').click()">📷 Pas de couverture ? Prends une photo</button>
+        </div>
         <button class="btn-primary" style="margin-top:10px; padding:8px;" onclick="prefillForm()">Ajouter ce livre →</button>
       </div>
     </div>
@@ -383,8 +387,11 @@ body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--te
         <select id="f-etagere" class="form-select"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">URL de couverture (optionnel)</label>
-        <input id="f-cover" class="form-input" type="text" placeholder="https://...">
+        <label class="form-label">Couverture (optionnel)</label>
+        <input id="f-cover" class="form-input" type="text" placeholder="https://... (ou prends une photo)">
+        <input id="f-cover-photo-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onCoverPhotoSelected(event, 'f-cover')">
+        <button type="button" class="btn-add-small" style="margin-top:6px; align-self:flex-start;" onclick="document.getElementById('f-cover-photo-input').click()">📷 Prendre une photo de la couverture</button>
+        <img id="f-cover-preview" style="display:none; width:70px; height:100px; object-fit:cover; border-radius:8px; margin-top:8px;" alt="Aperçu couverture">
       </div>
       <div class="form-group">
         <label class="form-label">Résumé (optionnel)</label>
@@ -766,6 +773,7 @@ function saveBook() {
   save();
   // reset form
   ['f-titre','f-auteur','f-cover','f-resume'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-cover-preview').style.display = 'none';
   document.getElementById('isbn-result').classList.remove('visible');
   document.getElementById('manual-form').classList.remove('visible');
   isbnFoundBook = null;
@@ -890,6 +898,66 @@ function onBarcodeDetected(code) {
   searchISBN();
 }
 
+// ===== PHOTO DE COUVERTURE (quand Google Books n'en a pas) =====
+// Les photos brutes d'un téléphone pèsent plusieurs Mo : trop lourd pour le
+// localStorage (limité à 5-10 Mo au total). On redimensionne et compresse
+// systématiquement avant de sauvegarder.
+function resizeAndCompressImage(file, maxWidth = 400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+    reader.onload = () => {
+      img.onerror = () => reject(new Error('Image invalide'));
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onCoverPhotoSelected(event, targetInputId) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showToast('Traitement de la photo...');
+    const dataUrl = await resizeAndCompressImage(file);
+    document.getElementById(targetInputId).value = dataUrl;
+    const preview = document.getElementById(targetInputId + '-preview');
+    if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
+    showToast('Photo ajoutée ! 📸');
+  } catch (e) {
+    showToast('Impossible de traiter cette photo, réessaie');
+  }
+  event.target.value = '';
+}
+
+async function onCoverPhotoSelectedForIsbnResult(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showToast('Traitement de la photo...');
+    const dataUrl = await resizeAndCompressImage(file);
+    isbnFoundBook.cover = dataUrl;
+    const coverImg = document.getElementById('isbn-cover');
+    coverImg.src = dataUrl;
+    coverImg.style.background = '';
+    document.getElementById('isbn-no-cover-zone').style.display = 'none';
+    showToast('Photo ajoutée ! 📸');
+  } catch (e) {
+    showToast('Impossible de traiter cette photo, réessaie');
+  }
+  event.target.value = '';
+}
+
 // Certaines erreurs Google Books (503, 500, 429) sont passagères : on réessaie
 // automatiquement avant d'abandonner et d'afficher une erreur à l'utilisatrice.
 async function fetchWithRetry(url, maxAttempts = 3) {
@@ -935,15 +1003,21 @@ async function searchISBN() {
     document.getElementById('isbn-author').textContent = isbnFoundBook.auteur;
     document.getElementById('isbn-desc').textContent = isbnFoundBook.resume;
     // Beaucoup de livres n'ont tout simplement pas de couverture dans Google Books :
-    // on affiche un dégradé de remplacement plutôt qu'une image cassée/vide.
+    // on affiche un dégradé de remplacement et on propose de prendre une photo.
     const coverImg = document.getElementById('isbn-cover');
+    const noCoverZone = document.getElementById('isbn-no-cover-zone');
+    function showNoCover() {
+      coverImg.removeAttribute('src');
+      coverImg.style.background = 'var(--grad)';
+      noCoverZone.style.display = 'block';
+    }
     if (isbnFoundBook.cover) {
       coverImg.src = isbnFoundBook.cover;
       coverImg.style.background = '';
-      coverImg.onerror = () => { coverImg.removeAttribute('src'); coverImg.style.background = 'var(--grad)'; };
+      noCoverZone.style.display = 'none';
+      coverImg.onerror = showNoCover;
     } else {
-      coverImg.removeAttribute('src');
-      coverImg.style.background = 'var(--grad)';
+      showNoCover();
     }
     document.getElementById('isbn-result').classList.add('visible');
     document.getElementById('manual-form').classList.remove('visible');
@@ -957,6 +1031,9 @@ function prefillForm() {
   document.getElementById('f-auteur').value = isbnFoundBook.auteur;
   document.getElementById('f-cover').value = isbnFoundBook.cover;
   document.getElementById('f-resume').value = isbnFoundBook.resume;
+  const preview = document.getElementById('f-cover-preview');
+  if (isbnFoundBook.cover) { preview.src = isbnFoundBook.cover; preview.style.display = 'block'; }
+  else { preview.style.display = 'none'; }
   document.getElementById('isbn-result').classList.remove('visible');
   updateFormSelects();
   document.getElementById('manual-form').classList.add('visible');
