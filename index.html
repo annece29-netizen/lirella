@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lirella">
+<meta name="theme-color" content="#E07AA0">
+<title>Lirella 📸</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ZXing : lecture de code-barres via la caméra du téléphone -->
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+<style>
+:root {
+  --rose: #F2A7C3;
+  --rose-deep: #E07AA0;
+  --lavande: #C9B8E8;
+  --peche: #FFD6B8;
+  --creme: #FFF8F2;
+  --texte: #3D2B3D;
+  --texte-leger: #8B6E8B;
+  --blanc: #FFFFFF;
+  --ombre: rgba(226,122,160,0.2);
+  --grad: linear-gradient(160deg, #FFD6B8 0%, #F2A7C3 50%, #C9B8E8 100%);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height:100%; overflow:hidden; }
+body { font-family:'DM Sans',sans-serif; background:var(--creme); color:var(--texte); }
+
+/* APP SHELL */
+.app { max-width:430px; margin:0 auto; height:100vh; display:flex; flex-direction:column; background:var(--creme); position:relative; box-shadow:0 0 60px rgba(0,0,0,0.08); overflow:hidden; }
+
+/* SCREENS */
+.screen { display:none; flex-direction:column; flex:1; overflow:hidden; }
+.screen.active { display:flex; }
+
+/* HEADER */
+.header { padding:52px 24px 20px; background:var(--grad); position:relative; overflow:hidden; flex-shrink:0; }
+.header::before { content:''; position:absolute; top:-40px; right:-40px; width:180px; height:180px; background:rgba(255,255,255,0.2); border-radius:50%; }
+.app-name { font-family:'Playfair Display',serif; font-size:28px; color:var(--blanc); position:relative; z-index:1; }
+.app-tagline { font-size:12px; color:rgba(255,255,255,0.85); margin-top:3px; position:relative; z-index:1; }
+
+/* CONTENT SCROLL */
+.content { flex:1; overflow-y:auto; padding-bottom:85px; -webkit-overflow-scrolling:touch; }
+
+/* NAV */
+.bottom-nav { position:absolute; bottom:0; left:0; right:0; background:white; display:flex; justify-content:space-around; padding:10px 0 22px; border-top:1px solid rgba(242,167,195,0.25); z-index:100; box-shadow:0 -6px 24px rgba(226,122,160,0.12); flex-shrink:0; }
+.nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; padding:4px 12px; border-radius:12px; }
+.nav-item.active .nav-icon { color:var(--rose-deep); }
+.nav-item.active .nav-label { color:var(--rose-deep); font-weight:500; }
+.nav-icon { font-size:22px; color:#C0A0C0; }
+.nav-label { font-size:10px; color:#C0A0C0; }
+
+/* SECTIONS */
+.section { padding:20px 20px 0; }
+.section-title { font-family:'Playfair Display',serif; font-size:18px; color:var(--texte); margin-bottom:14px; }
+
+/* STATS */
+.stats-row { display:flex; gap:10px; margin-bottom:20px; }
+.stat-pill { background:white; border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; align-items:center; flex:1; box-shadow:0 4px 14px var(--ombre); }
+.stat-num { font-family:'Playfair Display',serif; font-size:22px; color:var(--rose-deep); }
+.stat-label { font-size:10px; color:var(--texte-leger); margin-top:2px; text-align:center; }
+
+/* SCAN CTA */
+.scan-cta { margin:0 20px 20px; background:linear-gradient(135deg,var(--rose-deep),var(--lavande)); border-radius:18px; padding:18px 20px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 8px 22px rgba(226,122,160,0.35); transition:transform 0.2s; }
+.scan-cta:active { transform:scale(0.98); }
+.scan-cta-text h3 { color:white; font-size:15px; font-weight:500; }
+.scan-cta-text p { color:rgba(255,255,255,0.8); font-size:11px; margin-top:3px; }
+.scan-icon { font-size:32px; }
+
+/* HORIZONTAL SCROLL BOOKS */
+.books-scroll { display:flex; gap:12px; overflow-x:auto; padding:0 20px 8px; scrollbar-width:none; }
+.books-scroll::-webkit-scrollbar { display:none; }
+.book-card { flex-shrink:0; width:110px; cursor:pointer; }
+.book-card:active { transform:scale(0.96); }
+.book-cover { width:110px; height:155px; border-radius:10px; display:flex; align-items:flex-end; padding:8px; position:relative; overflow:hidden; box-shadow:4px 5px 16px rgba(0,0,0,0.15); }
+.book-cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.book-cover-overlay { position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 60%); }
+.book-cover-title { font-family:'Playfair Display',serif; font-size:11px; color:white; text-shadow:0 1px 3px rgba(0,0,0,0.5); line-height:1.2; position:relative; z-index:1; }
+.book-author { font-size:10px; color:var(--texte-leger); margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* EMPTY STATE */
+.empty-state { display:flex; flex-direction:column; align-items:center; padding:40px 24px; text-align:center; gap:12px; }
+.empty-state span { font-size:52px; }
+.empty-state h3 { font-family:'Playfair Display',serif; font-size:18px; color:var(--texte); }
+.empty-state p { font-size:13px; color:var(--texte-leger); line-height:1.5; }
+
+/* LIBRARY */
+.lib-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 0; }
+.lib-title { font-family:'Playfair Display',serif; font-size:16px; }
+.btn-add-small { background:var(--rose-deep); color:white; border:none; border-radius:20px; padding:7px 14px; font-size:12px; cursor:pointer; font-family:'DM Sans',sans-serif; }
+
+.bibliotheque-card { margin:12px 20px 0; background:white; border-radius:16px; overflow:hidden; box-shadow:0 4px 16px var(--ombre); }
+.bibliotheque-header { padding:14px 16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; background:linear-gradient(135deg, rgba(242,167,195,0.15), rgba(201,184,232,0.15)); }
+.bibliotheque-name { font-family:'Playfair Display',serif; font-size:15px; }
+.bibliotheque-meta { font-size:11px; color:var(--texte-leger); margin-top:2px; }
+.bibliotheque-toggle { font-size:18px; color:var(--rose-deep); transition:transform 0.2s; }
+.bibliotheque-toggle.open { transform:rotate(90deg); }
+
+.etagere-section { padding:12px 16px; border-top:1px solid rgba(242,167,195,0.15); }
+.etagere-label { font-size:11px; font-weight:500; color:var(--texte-leger); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.etagere-label::after { content:''; flex:1; height:1px; background:rgba(242,167,195,0.25); }
+.etagere-books { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px; }
+.etagere-books::-webkit-scrollbar { display:none; }
+.mini-book { flex-shrink:0; width:60px; cursor:pointer; }
+.mini-book-cover { width:60px; height:84px; border-radius:6px; display:flex; align-items:flex-end; padding:5px; position:relative; overflow:hidden; box-shadow:2px 3px 10px rgba(0,0,0,0.12); }
+.mini-book-cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.mini-book-cover-overlay { position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%); }
+.mini-book-title { font-size:8px; color:white; line-height:1.2; position:relative; z-index:1; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+.mini-book-author { font-size:9px; color:var(--texte-leger); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.etagere-empty { font-size:12px; color:var(--texte-leger); font-style:italic; }
+
+/* ADD SCREEN */
+.add-options { padding:20px; display:flex; flex-direction:column; gap:14px; }
+.add-option { background:white; border-radius:18px; padding:20px; display:flex; align-items:center; gap:16px; box-shadow:0 4px 18px var(--ombre); cursor:pointer; transition:transform 0.2s; }
+.add-option:active { transform:scale(0.98); }
+.add-option-icon { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+.add-option-text h3 { font-size:15px; font-weight:500; }
+.add-option-text p { font-size:11px; color:var(--texte-leger); margin-top:3px; line-height:1.4; }
+
+/* FORM */
+.form-panel { padding:0 20px 20px; display:none; flex-direction:column; gap:12px; }
+.form-panel.visible { display:flex; }
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-label { font-size:11px; font-weight:500; color:var(--texte-leger); text-transform:uppercase; letter-spacing:0.5px; }
+.form-input, .form-select { padding:11px 14px; border:1.5px solid rgba(242,167,195,0.4); border-radius:11px; font-family:'DM Sans',sans-serif; font-size:14px; color:var(--texte); background:white; outline:none; transition:border-color 0.2s; width:100%; }
+.form-input:focus, .form-select:focus { border-color:var(--rose-deep); }
+.form-select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%23E07AA0' d='M5 6L0 0h10z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; }
+.photo-upload { border:2px dashed rgba(242,167,195,0.5); border-radius:14px; padding:24px; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; background:rgba(242,167,195,0.04); }
+.photo-upload:active { background:rgba(242,167,195,0.1); }
+.photo-upload span { font-size:28px; }
+.photo-upload p { font-size:12px; color:var(--texte-leger); text-align:center; }
+.btn-primary { background:linear-gradient(135deg,var(--rose-deep),var(--lavande)); color:white; border:none; border-radius:13px; padding:14px; font-size:14px; font-weight:500; font-family:'DM Sans',sans-serif; cursor:pointer; box-shadow:0 6px 18px rgba(226,122,160,0.35); width:100%; }
+
+/* ISBN RESULT */
+.isbn-result { background:white; border-radius:16px; padding:16px; display:flex; gap:14px; box-shadow:0 4px 16px var(--ombre); margin:0 20px 16px; display:none; }
+.isbn-result.visible { display:flex; }
+.isbn-result img { width:64px; height:90px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+.isbn-result-info { flex:1; }
+.isbn-result-title { font-family:'Playfair Display',serif; font-size:15px; }
+.isbn-result-author { font-size:12px; color:var(--texte-leger); margin-top:3px; }
+.isbn-result-desc { font-size:11px; color:var(--texte-leger); margin-top:6px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* DISCOVER */
+.discover-banner { margin:16px 20px 0; background:linear-gradient(135deg,#FFD6B8,#F2A7C3); border-radius:18px; padding:18px 20px; position:relative; overflow:hidden; }
+.discover-banner::after { content:'✨'; position:absolute; right:16px; top:50%; transform:translateY(-50%); font-size:40px; opacity:0.4; }
+.discover-banner h3 { font-family:'Playfair Display',serif; font-size:16px; }
+.discover-banner p { font-size:12px; color:var(--texte-leger); margin-top:3px; }
+.month-badge { display:inline-block; background:var(--rose-deep); color:white; font-size:11px; padding:4px 12px; border-radius:20px; font-weight:500; }
+.discover-grid { padding:0 20px; display:flex; flex-direction:column; gap:12px; }
+.discover-card { background:white; border-radius:14px; padding:14px; display:flex; gap:12px; box-shadow:0 4px 14px var(--ombre); cursor:pointer; }
+.discover-cover { width:60px; height:85px; border-radius:8px; flex-shrink:0; object-fit:cover; background:var(--grad); }
+.discover-info { flex:1; overflow:hidden; }
+.discover-genre { font-size:10px; color:var(--rose-deep); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; }
+.discover-title { font-family:'Playfair Display',serif; font-size:14px; margin-top:3px; line-height:1.2; }
+.discover-author { font-size:11px; color:var(--texte-leger); margin-top:3px; }
+.discover-desc { font-size:11px; color:var(--texte-leger); margin-top:6px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.discover-add { margin-top:8px; background:rgba(242,167,195,0.15); color:var(--rose-deep); border:none; padding:5px 12px; border-radius:20px; font-size:11px; cursor:pointer; font-family:'DM Sans',sans-serif; }
+.loading-discover { display:flex; flex-direction:column; align-items:center; padding:40px; gap:12px; color:var(--texte-leger); font-size:13px; }
+.spinner { width:32px; height:32px; border:3px solid rgba(242,167,195,0.3); border-top-color:var(--rose-deep); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.btn-edit-biblio {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; padding: 4px 8px; color: var(--texte-leger);
+  border-radius: 8px; transition: background 0.2s; flex-shrink:0;
+}
+.btn-edit-biblio:hover { background: rgba(242,167,195,0.2); }
+/* MODAL */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-end; }
+.modal-overlay.active { display:flex; }
+.modal { background:white; border-radius:24px 24px 0 0; padding:24px 20px 40px; width:100%; max-width:430px; margin:0 auto; animation:slideUp 0.3s ease; max-height:85vh; overflow-y:auto; }
+@keyframes slideUp { from { transform:translateY(100%); } to { transform:translateY(0); } }
+.modal-title { font-family:'Playfair Display',serif; font-size:18px; margin-bottom:16px; }
+.modal-close { position:absolute; top:16px; right:20px; font-size:22px; cursor:pointer; color:var(--texte-leger); background:none; border:none; }
+
+/* SCAN OVERLAY */
+.scan-overlay { display:none; position:fixed; inset:0; background:#000; z-index:300; flex-direction:column; align-items:center; justify-content:center; gap:20px; }
+.scan-overlay.active { display:flex; }
+.scan-video-wrap { width:280px; height:280px; border-radius:20px; overflow:hidden; position:relative; background:#111; }
+.scan-video-wrap video { width:100%; height:100%; object-fit:cover; }
+.scan-frame { position:absolute; inset:0; border:2px solid rgba(242,167,195,0.6); border-radius:20px; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.scan-corner { position:absolute; width:32px; height:32px; border-color:var(--rose-deep); border-style:solid; }
+.scan-corner.tl { top:-2px; left:-2px; border-width:3px 0 0 3px; border-radius:8px 0 0 0; }
+.scan-corner.tr { top:-2px; right:-2px; border-width:3px 3px 0 0; border-radius:0 8px 0 0; }
+.scan-corner.bl { bottom:-2px; left:-2px; border-width:0 0 3px 3px; border-radius:0 0 0 8px; }
+.scan-corner.br { bottom:-2px; right:-2px; border-width:0 3px 3px 0; border-radius:0 0 8px 0; }
+.scan-line { position:absolute; width:80%; height:2px; background:var(--rose); box-shadow:0 0 8px var(--rose); animation:scanAnim 2s ease-in-out infinite; }
+@keyframes scanAnim { 0%,100% { top:15%; } 50% { top:80%; } }
+.scan-status { color:white; font-size:13px; text-align:center; min-height:18px; }
+.scan-manual-toggle { color:var(--rose); font-size:12px; text-decoration:underline; cursor:pointer; background:none; border:none; }
+.scan-input-zone { background:rgba(255,255,255,0.1); border-radius:16px; padding:16px 20px; display:flex; flex-direction:column; gap:10px; width:260px; }
+.scan-input-zone p { color:white; font-size:13px; text-align:center; }
+.scan-isbn-input { padding:10px 14px; border-radius:10px; border:none; font-family:'DM Sans',sans-serif; font-size:14px; outline:none; text-align:center; }
+.scan-search-btn { background:var(--rose-deep); color:white; border:none; border-radius:10px; padding:10px; font-size:14px; cursor:pointer; font-family:'DM Sans',sans-serif; }
+.scan-close { background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.2); padding:10px 28px; border-radius:50px; font-size:13px; cursor:pointer; font-family:'DM Sans',sans-serif; }
+
+/* TOAST */
+.toast { position:fixed; bottom:95px; left:50%; transform:translateX(-50%); background:var(--texte); color:white; padding:10px 22px; border-radius:50px; font-size:13px; z-index:400; opacity:0; transition:opacity 0.3s; white-space:nowrap; pointer-events:none; }
+.toast.show { opacity:1; }
+
+/* BOOK DETAIL MODAL */
+.book-detail-cover {
+  width: 100px; height: 145px;
+  border-radius: 12px; object-fit: cover;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+.book-detail-cover-placeholder {
+  width: 100px; height: 145px;
+  border-radius: 12px; flex-shrink: 0;
+  background: var(--grad);
+}
+.book-detail-header { display: flex; gap: 16px; margin-bottom: 20px; }
+.book-detail-info { flex: 1; }
+.book-detail-title { font-family: 'Playfair Display', serif; font-size: 18px; line-height: 1.3; }
+.book-detail-author { font-size: 13px; color: var(--texte-leger); margin-top: 6px; }
+.book-detail-genre { display: inline-block; background: rgba(242,167,195,0.2); color: var(--rose-deep); font-size: 11px; font-weight: 500; padding: 4px 12px; border-radius: 20px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.book-detail-resume-title { font-size: 12px; font-weight: 500; color: var(--texte-leger); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.book-detail-resume { font-size: 13px; color: var(--texte); line-height: 1.7; }
+.book-detail-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+
+/* ONBOARDING */
+#screen-onboarding { background:var(--grad); justify-content:center; align-items:center; text-align:center; padding:40px 30px; gap:24px; }
+#screen-onboarding .logo { font-size:72px; }
+#screen-onboarding h1 { font-family:'Playfair Display',serif; font-size:32px; color:white; }
+#screen-onboarding p { color:rgba(255,255,255,0.85); font-size:14px; line-height:1.6; }
+.onboard-input { padding:14px 18px; border-radius:14px; border:none; font-family:'DM Sans',sans-serif; font-size:16px; width:100%; outline:none; text-align:center; background:rgba(255,255,255,0.9); }
+.btn-onboard { background:white; color:var(--rose-deep); border:none; border-radius:14px; padding:16px; font-size:16px; font-weight:500; font-family:'DM Sans',sans-serif; cursor:pointer; width:100%; box-shadow:0 6px 20px rgba(0,0,0,0.15); }
+
+/* PROFILE */
+.profile-hero { background:var(--grad); padding:44px 24px 28px; text-align:center; }
+.avatar { width:72px; height:72px; background:white; border-radius:50%; margin:0 auto 10px; display:flex; align-items:center; justify-content:center; font-size:32px; box-shadow:0 4px 18px rgba(226,122,160,0.3); }
+.profile-name { font-family:'Playfair Display',serif; font-size:20px; color:white; }
+.profile-sub { font-size:12px; color:rgba(255,255,255,0.8); margin-top:3px; }
+.profile-stats { display:flex; justify-content:space-around; margin:0 20px; background:white; border-radius:18px; padding:18px; box-shadow:0 8px 28px var(--ombre); transform:translateY(-20px); }
+.p-stat { text-align:center; }
+.p-stat-num { font-family:'Playfair Display',serif; font-size:20px; color:var(--rose-deep); }
+.p-stat-label { font-size:10px; color:var(--texte-leger); margin-top:2px; }
+
+@keyframes fadeInUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.fade-in { animation:fadeInUp 0.35s ease both; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ONBOARDING -->
+<div id="screen-onboarding" class="screen active">
+  <div class="logo">📚</div>
+  <div>
+    <h1>Lirella</h1>
+    <p>Ta bibliothèque personnelle,<br>organisée à ta façon</p>
+  </div>
+  <input id="prenom-input" class="onboard-input" type="text" placeholder="Ton prénom..." maxlength="30">
+  <button class="btn-onboard" onclick="startApp()">Commencer ✨</button>
+</div>
+
+<!-- HOME -->
+<div id="screen-home" class="screen">
+  <div class="header">
+    <div class="app-name">Lirella</div>
+    <div class="app-tagline" id="home-tagline">Bonjour !</div>
+  </div>
+  <div class="content">
+    <div class="section">
+      <div class="stats-row">
+        <div class="stat-pill"><span class="stat-num" id="stat-livres">0</span><span class="stat-label">Livres</span></div>
+        <div class="stat-pill"><span class="stat-num" id="stat-biblio">0</span><span class="stat-label">Bibliothèques</span></div>
+        <div class="stat-pill"><span class="stat-num" id="stat-etageres">0</span><span class="stat-label">Étagères</span></div>
+      </div>
+    </div>
+
+    <div class="scan-cta" onclick="goTo('add', document.querySelectorAll('.nav-item')[2])">
+      <div class="scan-cta-text">
+        <h3>Ajouter un livre</h3>
+        <p>Scanner le code-barre ou saisir manuellement</p>
+      </div>
+      <div class="scan-icon">📷</div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Lectures récentes</p>
+    </div>
+    <div id="recent-books" class="books-scroll">
+      <div class="empty-state" style="padding:20px 40px; flex-direction:row; gap:10px;">
+        <span style="font-size:28px;">📖</span>
+        <p style="text-align:left; font-size:12px; color:var(--texte-leger);">Ajoute ton premier livre pour qu'il apparaisse ici !</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LIBRARY -->
+<div id="screen-library" class="screen">
+  <div class="header">
+    <div class="app-name">Ma Bibliothèque</div>
+    <div class="app-tagline" id="lib-tagline">0 livres</div>
+  </div>
+  <div class="content">
+    <div class="lib-header">
+      <p class="section-title" style="margin-bottom:0;">Mes bibliothèques</p>
+      <button class="btn-add-small" onclick="openAddBiblioModal()">+ Nouvelle</button>
+    </div>
+    <div id="bibliotheques-list" style="padding-bottom:16px;">
+      <div class="empty-state">
+        <span>📚</span>
+        <h3>Aucune bibliothèque</h3>
+        <p>Crée ta première bibliothèque pour commencer à ranger tes livres !</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD -->
+<div id="screen-add" class="screen">
+  <div class="header">
+    <div class="app-name">Ajouter ✨</div>
+    <div class="app-tagline">Scanner ou saisir manuellement</div>
+  </div>
+  <div class="content">
+    <div class="add-options">
+      <div class="add-option" onclick="openScan()">
+        <div class="add-option-icon" style="background:linear-gradient(135deg,#F2A7C3,#E07AA0);">📷</div>
+        <div class="add-option-text">
+          <h3>Scanner le code-barre</h3>
+          <p>Pointe la caméra vers le code-barre du livre pour le trouver automatiquement</p>
+        </div>
+      </div>
+      <div class="add-option" onclick="toggleForm()">
+        <div class="add-option-icon" style="background:linear-gradient(135deg,#C9B8E8,#9b59b6);">✍️</div>
+        <div class="add-option-text">
+          <h3>Ajouter manuellement</h3>
+          <p>Pour les livres auto-édités ou introuvables</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISBN result preview -->
+    <div id="isbn-result" class="isbn-result">
+      <img id="isbn-cover" src="" alt="couverture">
+      <div class="isbn-result-info">
+        <p class="isbn-result-title" id="isbn-title"></p>
+        <p class="isbn-result-author" id="isbn-author"></p>
+        <p class="isbn-result-desc" id="isbn-desc"></p>
+        <button class="btn-primary" style="margin-top:10px; padding:8px;" onclick="prefillForm()">Ajouter ce livre →</button>
+      </div>
+    </div>
+
+    <!-- Manual form -->
+    <div id="manual-form" class="form-panel">
+      <div class="form-group">
+        <label class="form-label">Titre</label>
+        <input id="f-titre" class="form-input" type="text" placeholder="Titre du livre">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Auteur(e)</label>
+        <input id="f-auteur" class="form-input" type="text" placeholder="Prénom Nom">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catégorie</label>
+        <select id="f-categorie" class="form-select">
+          <option value="Roman">Roman</option>
+          <option value="Thriller">Thriller</option>
+          <option value="Fantasy">Fantasy</option>
+          <option value="Romance">Romance</option>
+          <option value="Auto-édition">Auto-édition</option>
+          <option value="SF">Science-fiction</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Bibliothèque</label>
+        <select id="f-biblio" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Étagère</label>
+        <select id="f-etagere" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">URL de couverture (optionnel)</label>
+        <input id="f-cover" class="form-input" type="text" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Résumé (optionnel)</label>
+        <textarea id="f-resume" class="form-input" rows="3" placeholder="En quelques mots..." style="resize:none;"></textarea>
+      </div>
+      <button class="btn-primary" onclick="saveBook()">Ajouter à ma bibliothèque 📸</button>
+    </div>
+  </div>
+</div>
+
+<!-- DISCOVER -->
+<div id="screen-discover" class="screen">
+  <div class="header">
+    <div class="app-name">Découvrir</div>
+    <div class="app-tagline">Nouveautés et tendances</div>
+  </div>
+  <div class="content">
+    <div class="discover-banner">
+      <h3>Nouveautés du moment</h3>
+      <p>Romans français récents</p>
+    </div>
+    <div class="section">
+      <span class="month-badge">📅 Avril 2026</span>
+    </div>
+    <div id="discover-grid" class="discover-grid" style="margin-top:14px;">
+      <div class="loading-discover">
+        <div class="spinner"></div>
+        <p>Chargement des livres...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div id="screen-profile" class="screen">
+  <div class="profile-hero">
+    <div class="avatar">👤</div>
+    <p class="profile-name" id="profile-name">Marine</p>
+    <p class="profile-sub">Ma bibliothèque personnelle</p>
+  </div>
+  <div class="content">
+    <div class="profile-stats">
+      <div class="p-stat"><p class="p-stat-num" id="ps-livres">0</p><p class="p-stat-label">Livres</p></div>
+      <div class="p-stat"><p class="p-stat-num" id="ps-biblio">0</p><p class="p-stat-label">Biblioth.</p></div>
+      <div class="p-stat"><p class="p-stat-num" id="ps-etageres">0</p><p class="p-stat-label">Étagères</p></div>
+    </div>
+    <div class="section" style="padding-top:4px;">
+      <p class="section-title">Paramètres</p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="background:white; border-radius:14px; padding:16px; box-shadow:0 4px 14px var(--ombre);">
+          <label class="form-label">Mon prénom</label>
+          <div style="display:flex; gap:10px; margin-top:8px;">
+            <input id="edit-prenom" class="form-input" type="text" style="flex:1;">
+            <button class="btn-primary" style="width:auto; padding:10px 16px;" onclick="savePrenom()">OK</button>
+          </div>
+        </div>
+        <button onclick="resetAll()" style="background:rgba(226,122,160,0.1); color:var(--rose-deep); border:1.5px solid rgba(242,167,195,0.4); border-radius:13px; padding:14px; font-size:14px; cursor:pointer; font-family:'DM Sans',sans-serif;">🗑 Réinitialiser toutes les données</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="bottom-nav">
+  <div class="nav-item active" onclick="goTo('home',this)"><span class="nav-icon">🏠</span><span class="nav-label">Accueil</span></div>
+  <div class="nav-item" onclick="goTo('library',this)"><span class="nav-icon">📚</span><span class="nav-label">Bibliothèque</span></div>
+  <div class="nav-item" onclick="goTo('add',this)"><span class="nav-icon">➕</span><span class="nav-label">Ajouter</span></div>
+  <div class="nav-item" onclick="goTo('discover',this)"><span class="nav-icon">🔍</span><span class="nav-label">Découvrir</span></div>
+  <div class="nav-item" onclick="goTo('profile',this)"><span class="nav-icon">👤</span><span class="nav-label">Profil</span></div>
+</nav>
+
+</div><!-- /app -->
+
+<!-- MODAL : Modifier bibliothèque -->
+<div id="modal-edit-biblio" class="modal-overlay" onclick="closeModalEditBiblio(event)">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" onclick="closeModalEditBiblioBtn()">✕</button>
+    <p class="modal-title">Modifier la bibliothèque</p>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Nom de la bibliothèque</label>
+        <input id="edit-biblio-name" class="form-input" type="text" placeholder="Ex : Salon, Chambre...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nombre d'étagères</label>
+        <input id="edit-biblio-etageres" class="form-input" type="number" min="1" max="20" value="3">
+      </div>
+      <button class="btn-primary" onclick="saveEditBiblio()">Enregistrer les modifications</button>
+      <button onclick="deleteBiblio()" style="background:rgba(226,122,160,0.1); color:var(--rose-deep); border:1.5px solid rgba(242,167,195,0.4); border-radius:13px; padding:14px; font-size:14px; cursor:pointer; font-family:'DM Sans',sans-serif;">🗑 Supprimer cette bibliothèque</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL : Book detail -->
+<div id="modal-book-detail" class="modal-overlay" onclick="closeBookDetail(event)">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" onclick="closeBookDetailBtn()">✕</button>
+    <div class="book-detail-header">
+      <img id="bd-cover" class="book-detail-cover" src="" alt="" onerror="this.style.display='none'; document.getElementById('bd-cover-placeholder').style.display='block';">
+      <div id="bd-cover-placeholder" class="book-detail-cover-placeholder" style="display:none;"></div>
+      <div class="book-detail-info">
+        <p class="book-detail-title" id="bd-title"></p>
+        <p class="book-detail-author" id="bd-author"></p>
+        <span class="book-detail-genre" id="bd-genre"></span>
+      </div>
+    </div>
+    <p class="book-detail-resume-title">Résumé</p>
+    <p class="book-detail-resume" id="bd-resume"></p>
+    <div class="book-detail-actions">
+      <button class="btn-primary" onclick="addDiscoverBookToLib()">+ Ajouter à ma bibliothèque</button>
+      <button onclick="closeBookDetailBtn()" style="background:rgba(242,167,195,0.1); color:var(--rose-deep); border:1.5px solid rgba(242,167,195,0.3); border-radius:13px; padding:12px; font-size:14px; cursor:pointer; font-family:'DM Sans',sans-serif;">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCAN OVERLAY -->
+<div id="scan-overlay" class="scan-overlay">
+  <div class="scan-video-wrap">
+    <video id="scan-video" muted playsinline></video>
+    <div class="scan-frame">
+      <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
+      <div class="scan-corner bl"></div><div class="scan-corner br"></div>
+      <div class="scan-line"></div>
+    </div>
+  </div>
+  <p class="scan-status" id="scan-status">Pointe la caméra vers le code-barre du livre</p>
+  <button class="scan-manual-toggle" onclick="showManualIsbnEntry()">Le code-barre est illisible ? Saisir le numéro à la main</button>
+
+  <div id="scan-input-zone" class="scan-input-zone" style="display:none;">
+    <p>📖 Saisis le numéro ISBN<br><small style='opacity:0.7'>13 chiffres sous le code-barre</small></p>
+    <input id="isbn-input" class="scan-isbn-input" type="number" placeholder="9782...">
+    <button class="scan-search-btn" onclick="searchISBN()">🔍 Rechercher</button>
+  </div>
+
+  <button class="scan-close" onclick="closeScan()">Fermer</button>
+</div>
+
+<!-- MODAL : Nouvelle bibliothèque -->
+<div id="modal-biblio" class="modal-overlay" onclick="closeModalBiblio(event)">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" onclick="closeModalBiblioBtn()">✕</button>
+    <p class="modal-title">Nouvelle bibliothèque</p>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Nom de la bibliothèque</label>
+        <input id="new-biblio-name" class="form-input" type="text" placeholder="Ex : Salon, Chambre...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nombre d'étagères</label>
+        <input id="new-biblio-etageres" class="form-input" type="number" min="1" max="20" value="3" placeholder="3">
+      </div>
+      <button class="btn-primary" onclick="saveBiblio()">Créer la bibliothèque</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<script>
+// ===== DATA =====
+let db = { prenom:'', bibliotheques:[], livres:[] };
+let isbnFoundBook = null;
+let discoverLoaded = false;
+
+const COLORS = [
+  'linear-gradient(135deg,#E07AA0,#C9B8E8)',
+  'linear-gradient(135deg,#FFB347,#E07AA0)',
+  'linear-gradient(135deg,#a8edea,#fed6e3)',
+  'linear-gradient(135deg,#C9B8E8,#FFD6B8)',
+  'linear-gradient(135deg,#fd79a8,#a29bfe)',
+  'linear-gradient(135deg,#55efc4,#F2A7C3)',
+  'linear-gradient(135deg,#6c5ce7,#fd79a8)',
+  'linear-gradient(135deg,#ffeaa7,#E07AA0)',
+  'linear-gradient(135deg,#74b9ff,#C9B8E8)',
+  'linear-gradient(135deg,#F2A7C3,#6c5ce7)',
+];
+
+// ===== STORAGE =====
+function save() { try { localStorage.setItem('lirella_db', JSON.stringify(db)); } catch(e){} }
+function load() {
+  try {
+    const raw = localStorage.getItem('lirella_db');
+    if (raw) { db = JSON.parse(raw); return true; }
+  } catch(e) {}
+  return false;
+}
+
+// ===== INIT =====
+window.onload = function() {
+  const hasData = load();
+  if (hasData && db.prenom) {
+    showMainApp();
+  }
+};
+
+function startApp() {
+  const prenom = document.getElementById('prenom-input').value.trim();
+  if (!prenom) { showToast('Entre ton prénom pour commencer 📸'); return; }
+  db.prenom = prenom;
+  save();
+  showMainApp();
+}
+
+function showMainApp() {
+  document.getElementById('screen-onboarding').classList.remove('active');
+  document.getElementById('screen-home').classList.add('active');
+  document.querySelector('.bottom-nav').style.display = 'flex';
+  updateUI();
+}
+
+// ===== NAVIGATION =====
+function goTo(screen, navEl) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  if (navEl) navEl.classList.add('active');
+  if (screen === 'discover' && !discoverLoaded) loadDiscover();
+  if (screen === 'add') updateFormSelects();
+  if (screen === 'profile') {
+    document.getElementById('edit-prenom').value = db.prenom;
+    document.getElementById('profile-name').textContent = db.prenom || 'Moi';
+  }
+  updateUI();
+}
+
+// ===== UPDATE UI =====
+function updateUI() {
+  const totalLivres = db.livres.length;
+  const totalBiblio = db.bibliotheques.length;
+  const totalEtageres = db.bibliotheques.reduce((s,b) => s + b.etageres, 0);
+
+  document.getElementById('stat-livres').textContent = totalLivres;
+  document.getElementById('stat-biblio').textContent = totalBiblio;
+  document.getElementById('stat-etageres').textContent = totalEtageres;
+  document.getElementById('ps-livres').textContent = totalLivres;
+  document.getElementById('ps-biblio').textContent = totalBiblio;
+  document.getElementById('ps-etageres').textContent = totalEtageres;
+  document.getElementById('lib-tagline').textContent = totalLivres + ' livre' + (totalLivres > 1 ? 's' : '');
+  document.getElementById('home-tagline').textContent = 'Bonjour ' + (db.prenom || '') + ' ✨';
+
+  renderRecentBooks();
+  renderBibliotheques();
+}
+
+// ===== RECENT BOOKS (home) =====
+function renderRecentBooks() {
+  const container = document.getElementById('recent-books');
+  const recent = [...db.livres].reverse().slice(0, 10);
+  if (recent.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:20px 40px;flex-direction:row;gap:10px;"><span style="font-size:28px;">📖</span><p style="text-align:left;font-size:12px;color:var(--texte-leger);">Ajoute ton premier livre !</p></div>`;
+    return;
+  }
+  container.innerHTML = recent.map((l, i) => {
+    const color = COLORS[i % COLORS.length];
+    const coverStyle = l.cover ? `background:url('${l.cover}') center/cover` : `background:${color}`;
+    return `<div class="book-card fade-in">
+      <div class="book-cover" style="${coverStyle};">
+        ${l.cover ? '' : '<div class="book-cover-overlay"></div>'}
+        <span class="book-cover-title">${l.titre}</span>
+      </div>
+      <p class="book-author">${l.auteur || ''}</p>
+    </div>`;
+  }).join('');
+}
+
+// ===== BIBLIOTHEQUES =====
+function renderBibliotheques() {
+  const container = document.getElementById('bibliotheques-list');
+  if (db.bibliotheques.length === 0) {
+    container.innerHTML = `<div class="empty-state"><span>📚</span><h3>Aucune bibliothèque</h3><p>Crée ta première bibliothèque pour commencer à ranger tes livres !</p></div>`;
+    return;
+  }
+  container.innerHTML = db.bibliotheques.map((b, bi) => {
+    const livresDeBiblio = db.livres.filter(l => l.biblioId === b.id);
+    let etageresSections = '';
+    for (let e = 1; e <= b.etageres; e++) {
+      const livresDEtagere = livresDeBiblio.filter(l => l.etagere === e);
+      const booksHTML = livresDEtagere.length === 0
+        ? `<span class="etagere-empty">Vide — ajoute des livres !</span>`
+        : livresDEtagere.map((l, li) => {
+          const color = COLORS[(bi * 3 + li) % COLORS.length];
+          const coverStyle = l.cover ? `background:url('${l.cover}') center/cover` : `background:${color}`;
+          return `<div class="mini-book">
+            <div class="mini-book-cover" style="${coverStyle};">
+              ${l.cover ? '' : '<div class="mini-book-cover-overlay"></div>'}
+              <span class="mini-book-title">${l.titre}</span>
+            </div>
+            <p class="mini-book-author">${l.auteur || ''}</p>
+          </div>`;
+        }).join('');
+      etageresSections += `<div class="etagere-section">
+        <p class="etagere-label">Étagère ${e}</p>
+        <div class="etagere-books">${booksHTML}</div>
+      </div>`;
+    }
+    return `<div class="bibliotheque-card fade-in">
+      <div class="bibliotheque-header" onclick="toggleBiblio('biblio-body-${b.id}', this)">
+        <div style="flex:1;">
+          <p class="bibliotheque-name">${b.nom}</p>
+          <p class="bibliotheque-meta">${b.etageres} étagère${b.etageres > 1 ? 's' : ''} · ${livresDeBiblio.length} livre${livresDeBiblio.length > 1 ? 's' : ''}</p>
+        </div>
+        <button class="btn-edit-biblio" onclick="event.stopPropagation(); openEditBiblio('${b.id}')">✏️</button>
+        <span class="bibliotheque-toggle open" style="margin-left:4px;">▸</span>
+      </div>
+      <div id="biblio-body-${b.id}">${etageresSections}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleBiblio(bodyId, header) {
+  const body = document.getElementById(bodyId);
+  const toggle = header.querySelector('.bibliotheque-toggle');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    toggle.classList.add('open');
+  } else {
+    body.style.display = 'none';
+    toggle.classList.remove('open');
+  }
+}
+
+// ===== ADD BIBLIO =====
+function openAddBiblioModal() {
+  document.getElementById('new-biblio-name').value = '';
+  document.getElementById('new-biblio-etageres').value = '3';
+  document.getElementById('modal-biblio').classList.add('active');
+}
+function closeModalBiblio(e) { if (e.target === document.getElementById('modal-biblio')) closeModalBiblioBtn(); }
+function closeModalBiblioBtn() { document.getElementById('modal-biblio').classList.remove('active'); }
+function saveBiblio() {
+  const nom = document.getElementById('new-biblio-name').value.trim();
+  const etageres = parseInt(document.getElementById('new-biblio-etageres').value) || 3;
+  if (!nom) { showToast('Donne un nom à ta bibliothèque !'); return; }
+  db.bibliotheques.push({ id: Date.now().toString(), nom, etageres });
+  save();
+  closeModalBiblioBtn();
+  updateUI();
+  showToast('Bibliothèque "' + nom + '" créée ! 🎉');
+}
+
+// ===== FORM SELECTS =====
+function updateFormSelects() {
+  const biblioSel = document.getElementById('f-biblio');
+  const etagereSel = document.getElementById('f-etagere');
+  if (db.bibliotheques.length === 0) {
+    biblioSel.innerHTML = '<option value="">— Crée d\'abord une bibliothèque —</option>';
+    etagereSel.innerHTML = '<option value="">—</option>';
+    return;
+  }
+  biblioSel.innerHTML = db.bibliotheques.map(b => `<option value="${b.id}">${b.nom}</option>`).join('');
+  updateEtagereSelect();
+  biblioSel.onchange = updateEtagereSelect;
+}
+function updateEtagereSelect() {
+  const biblioId = document.getElementById('f-biblio').value;
+  const biblio = db.bibliotheques.find(b => b.id === biblioId);
+  const etagereSel = document.getElementById('f-etagere');
+  if (!biblio) { etagereSel.innerHTML = '<option>—</option>'; return; }
+  etagereSel.innerHTML = Array.from({length: biblio.etageres}, (_,i) => `<option value="${i+1}">Étagère ${i+1}</option>`).join('');
+}
+
+// ===== SAVE BOOK =====
+function saveBook() {
+  const titre = document.getElementById('f-titre').value.trim();
+  const auteur = document.getElementById('f-auteur').value.trim();
+  const biblioId = document.getElementById('f-biblio').value;
+  const etagere = parseInt(document.getElementById('f-etagere').value) || 1;
+  if (!titre) { showToast('Ajoute au moins un titre 📖'); return; }
+  if (!biblioId) { showToast('Crée d\'abord une bibliothèque !'); return; }
+  db.livres.push({
+    id: Date.now().toString(),
+    titre, auteur,
+    categorie: document.getElementById('f-categorie').value,
+    biblioId, etagere,
+    cover: document.getElementById('f-cover').value.trim(),
+    resume: document.getElementById('f-resume').value.trim()
+  });
+  save();
+  // reset form
+  ['f-titre','f-auteur','f-cover','f-resume'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('isbn-result').classList.remove('visible');
+  document.getElementById('manual-form').classList.remove('visible');
+  isbnFoundBook = null;
+  updateUI();
+  showToast('Livre ajouté ! 🎉');
+  goTo('library', document.querySelectorAll('.nav-item')[1]);
+}
+
+// ===== SCAN CAMÉRA (ZXing) =====
+let zxingReader = null;
+let scanActiveStream = null;
+
+function openScan() {
+  document.getElementById('scan-overlay').classList.add('active');
+  document.getElementById('scan-input-zone').style.display = 'none';
+  document.getElementById('scan-status').textContent = 'Pointe la caméra vers le code-barre du livre';
+  startCameraScan();
+}
+
+function closeScan() {
+  document.getElementById('scan-overlay').classList.remove('active');
+  stopCameraScan();
+}
+
+function showManualIsbnEntry() {
+  stopCameraScan();
+  document.getElementById('scan-input-zone').style.display = 'flex';
+  document.getElementById('scan-status').textContent = '';
+  document.getElementById('isbn-input').focus();
+}
+
+async function startCameraScan() {
+  // Le scan caméra nécessite HTTPS (ou localhost) et la librairie ZXing chargée
+  if (typeof ZXingBrowser === 'undefined' && typeof ZXing === 'undefined') {
+    document.getElementById('scan-status').textContent = 'Scanner indisponible, saisis le numéro à la main';
+    showManualIsbnEntry();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('scan-status').textContent = 'Caméra non accessible ici (HTTPS requis), saisis le numéro à la main';
+    showManualIsbnEntry();
+    return;
+  }
+  try {
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+
+    const videoEl = document.getElementById('scan-video');
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    const backCam = devices.find(d => /back|arrière|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+
+    zxingReader.decodeFromVideoDevice(backCam ? backCam.deviceId : undefined, videoEl, (result, err) => {
+      if (result) {
+        const code = result.getText();
+        onBarcodeDetected(code);
+      }
+    }).then(controls => { scanActiveStream = controls; });
+  } catch (e) {
+    document.getElementById('scan-status').textContent = 'Impossible d\'accéder à la caméra, saisis le numéro à la main';
+    showManualIsbnEntry();
+  }
+}
+
+function stopCameraScan() {
+  try {
+    if (zxingReader) { zxingReader.reset(); }
+  } catch(e) {}
+  zxingReader = null;
+  scanActiveStream = null;
+}
+
+function onBarcodeDetected(code) {
+  // On ne garde que des codes plausibles (ISBN-13 commence en général par 978/979)
+  const digits = code.replace(/[^0-9]/g, '');
+  if (digits.length < 8) return;
+  document.getElementById('scan-status').textContent = 'Code détecté : ' + digits;
+  stopCameraScan();
+  closeScan();
+  document.getElementById('isbn-input').value = digits;
+  searchISBN();
+}
+
+async function searchISBN() {
+  const isbn = document.getElementById('isbn-input').value.trim();
+  if (!isbn) return;
+  showToast('Recherche en cours...');
+  try {
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    const data = await res.json();
+    if (!data.items || data.items.length === 0) { showToast('Livre introuvable, essaie manuellement'); return; }
+    const info = data.items[0].volumeInfo;
+    isbnFoundBook = {
+      titre: info.title || '',
+      auteur: (info.authors || []).join(', '),
+      cover: info.imageLinks?.thumbnail?.replace('http:', 'https:') || '',
+      resume: info.description || '',
+      categorie: (info.categories || ['Autre'])[0]
+    };
+    document.getElementById('isbn-title').textContent = isbnFoundBook.titre;
+    document.getElementById('isbn-author').textContent = isbnFoundBook.auteur;
+    document.getElementById('isbn-desc').textContent = isbnFoundBook.resume;
+    document.getElementById('isbn-cover').src = isbnFoundBook.cover;
+    document.getElementById('isbn-result').classList.add('visible');
+    document.getElementById('manual-form').classList.remove('visible');
+    showToast('Livre trouvé ! 🎉');
+  } catch(e) { showToast('Erreur de recherche'); }
+}
+
+function prefillForm() {
+  if (!isbnFoundBook) return;
+  document.getElementById('f-titre').value = isbnFoundBook.titre;
+  document.getElementById('f-auteur').value = isbnFoundBook.auteur;
+  document.getElementById('f-cover').value = isbnFoundBook.cover;
+  document.getElementById('f-resume').value = isbnFoundBook.resume;
+  document.getElementById('isbn-result').classList.remove('visible');
+  updateFormSelects();
+  document.getElementById('manual-form').classList.add('visible');
+  document.getElementById('manual-form').scrollIntoView({behavior:'smooth'});
+}
+
+function toggleForm() {
+  updateFormSelects();
+  const f = document.getElementById('manual-form');
+  f.classList.toggle('visible');
+  if (f.classList.contains('visible')) f.scrollIntoView({behavior:'smooth'});
+}
+
+// ===== DISCOVER (Google Books API) =====
+async function loadDiscover() {
+  discoverLoaded = true;
+  const grid = document.getElementById('discover-grid');
+  try {
+    const queries = ['roman français 2024', 'thriller français 2025', 'romance bestseller 2024'];
+    const results = [];
+    for (const q of queries) {
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&langRestrict=fr&maxResults=4&orderBy=newest`);
+      const data = await res.json();
+      if (data.items) results.push(...data.items);
+    }
+    const seen = new Set();
+    const books = results.filter(item => {
+      const info = item.volumeInfo;
+      if (!info.title || !info.authors || seen.has(info.title)) return false;
+      seen.add(info.title);
+      return true;
+    }).slice(0, 9);
+
+    if (books.length === 0) { grid.innerHTML = '<div class="empty-state"><span>📚</span><p>Impossible de charger les livres. Vérifie ta connexion.</p></div>'; return; }
+
+    grid.innerHTML = books.map(item => {
+      const info = item.volumeInfo;
+      const cover = info.imageLinks?.thumbnail?.replace('http:','https:') || '';
+      const title = info.title || '';
+      const author = (info.authors || []).join(', ');
+      const desc = (info.description || 'Aucun résumé disponible.').substring(0, 120) + '...';
+      const genre = (info.categories || ['Littérature'])[0].split('/')[0].trim();
+      const coverEl = cover
+        ? `<img class="discover-cover" src="${cover}" alt="${title}" onerror="this.style.background='var(--grad)'; this.removeAttribute('src');">`
+        : `<div class="discover-cover"></div>`;
+      const safeTitle = title.replace(/`/g,'').replace(/'/g,'\'');
+      const safeAuthor = author.replace(/`/g,'').replace(/'/g,'\'');
+      const safeDesc = (info.description || '').replace(/`/g,'').replace(/'/g,'\'');
+      const safeGenre = genre.replace(/`/g,'').replace(/'/g,'\'');
+      return `<div class="discover-card fade-in" onclick="openBookDetail('${safeTitle}','${safeAuthor}','${cover}','${safeGenre}','${safeDesc}')" style="cursor:pointer;">
+        ${coverEl}
+        <div class="discover-info">
+          <p class="discover-genre">${genre}</p>
+          <p class="discover-title">${title}</p>
+          <p class="discover-author">${author}</p>
+          <p class="discover-desc">${desc}</p>
+          <span style="font-size:11px; color:var(--rose-deep); margin-top:6px; display:inline-block;">Voir le résumé →</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div class="empty-state"><span>📚</span><p>Impossible de charger les livres. Vérifie ta connexion.</p></div>';
+  }
+}
+
+// ===== PROFILE =====
+function savePrenom() {
+  const p = document.getElementById('edit-prenom').value.trim();
+  if (!p) return;
+  db.prenom = p;
+  save();
+  document.getElementById('profile-name').textContent = p;
+  updateUI();
+  showToast('Prénom mis à jour ✨');
+}
+
+function resetAll() {
+  if (!confirm('Effacer toutes tes données ? Cette action est irréversible.')) return;
+  localStorage.removeItem('lirella_db');
+  location.reload();
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ===== BOOK DETAIL =====
+let currentDetailBook = null;
+
+function openBookDetail(title, author, cover, genre, resume) {
+  currentDetailBook = { titre: title, auteur: author, cover, categorie: genre, resume };
+  document.getElementById('bd-title').textContent = title;
+  document.getElementById('bd-author').textContent = author;
+  document.getElementById('bd-genre').textContent = genre;
+  document.getElementById('bd-resume').textContent = resume || 'Aucun résumé disponible.';
+  const coverEl = document.getElementById('bd-cover');
+  const placeholder = document.getElementById('bd-cover-placeholder');
+  if (cover) {
+    coverEl.src = cover;
+    coverEl.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    coverEl.style.display = 'none';
+    placeholder.style.display = 'block';
+  }
+  document.getElementById('modal-book-detail').classList.add('active');
+}
+function closeBookDetail(e) {
+  if (e.target === document.getElementById('modal-book-detail')) closeBookDetailBtn();
+}
+function closeBookDetailBtn() {
+  document.getElementById('modal-book-detail').classList.remove('active');
+}
+function addDiscoverBookToLib() {
+  if (!currentDetailBook) return;
+  if (db.bibliotheques.length === 0) {
+    closeBookDetailBtn();
+    showToast('Crée d\'abord une bibliothèque !');
+    goTo('library', document.querySelectorAll('.nav-item')[1]);
+    return;
+  }
+  closeBookDetailBtn();
+  goTo('add', document.querySelectorAll('.nav-item')[2]);
+  setTimeout(() => {
+    updateFormSelects();
+    document.getElementById('f-titre').value = currentDetailBook.titre;
+    document.getElementById('f-auteur').value = currentDetailBook.auteur;
+    document.getElementById('f-cover').value = currentDetailBook.cover || '';
+    document.getElementById('f-resume').value = currentDetailBook.resume || '';
+    document.getElementById('manual-form').classList.add('visible');
+    document.getElementById('manual-form').scrollIntoView({ behavior: 'smooth' });
+  }, 100);
+}
+
+// ===== EDIT BIBLIO =====
+let editingBiblioId = null;
+
+function openEditBiblio(id) {
+  editingBiblioId = id;
+  const b = db.bibliotheques.find(b => b.id === id);
+  if (!b) return;
+  document.getElementById('edit-biblio-name').value = b.nom;
+  document.getElementById('edit-biblio-etageres').value = b.etageres;
+  document.getElementById('modal-edit-biblio').classList.add('active');
+}
+function closeModalEditBiblio(e) {
+  if (e.target === document.getElementById('modal-edit-biblio')) closeModalEditBiblioBtn();
+}
+function closeModalEditBiblioBtn() {
+  document.getElementById('modal-edit-biblio').classList.remove('active');
+  editingBiblioId = null;
+}
+function saveEditBiblio() {
+  const nom = document.getElementById('edit-biblio-name').value.trim();
+  const etageres = parseInt(document.getElementById('edit-biblio-etageres').value) || 1;
+  if (!nom) { showToast('Donne un nom à ta bibliothèque !'); return; }
+  const b = db.bibliotheques.find(b => b.id === editingBiblioId);
+  if (!b) return;
+  b.nom = nom;
+  b.etageres = etageres;
+  db.livres.forEach(l => {
+    if (l.biblioId === b.id && l.etagere > etageres) l.etagere = etageres;
+  });
+  save();
+  closeModalEditBiblioBtn();
+  updateUI();
+  showToast('Bibliothèque modifiée ✨');
+}
+function deleteBiblio() {
+  if (!confirm("Supprimer cette bibliothèque ? Les livres qu'elle contient seront aussi supprimés.")) return;
+  db.livres = db.livres.filter(l => l.biblioId !== editingBiblioId);
+  db.bibliotheques = db.bibliotheques.filter(b => b.id !== editingBiblioId);
+  save();
+  closeModalEditBiblioBtn();
+  updateUI();
+  showToast('Bibliothèque supprimée');
+}
+
+// Enter key on ISBN
+document.getElementById('isbn-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchISBN(); });
+</script>
+</body>
+</html>
