@@ -900,15 +900,19 @@ async function enableContinuousFocusIfSupported(track) {
   } catch (e) { /* pas grave : le tap-to-focus manuel reste disponible */ }
 }
 
+let refocusInProgress = false;
 async function refocusOnTap() {
-  const track = document.getElementById('scan-video').srcObject?.getVideoTracks?.()[0];
-  if (!track || typeof track.getCapabilities !== 'function') return;
-  try {
-    const capabilities = track.getCapabilities();
-    if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
-      await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
-    }
-  } catch (e) { /* certains navigateurs refusent : le scan continue sans */ }
+  // Safari iOS n'expose quasiment jamais focusMode dans getCapabilities(), même
+  // quand le matériel le supporte : applyConstraints() ne sert donc à rien ici.
+  // La technique fiable sur iPhone : couper puis relancer le flux vidéo force le
+  // système à refaire une nouvelle mise au point automatique au redémarrage.
+  if (refocusInProgress) return;
+  refocusInProgress = true;
+  document.getElementById('scan-status').textContent = 'Nouvelle mise au point...';
+  stopCameraScan();
+  await new Promise(r => setTimeout(r, 150));
+  await startCameraScan();
+  refocusInProgress = false;
 }
 
 async function startCameraScan() {
